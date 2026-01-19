@@ -8,47 +8,49 @@ Place this file in: ComfyUI/custom_nodes/pixel_art_scaler/__init__.py
 
 import numpy as np
 import torch
-import folder_paths
-import comfy.utils
+from comfy_api.latest import io, ui
 
-class PixelArtScaler:
+
+ALGORITHMS = [
+    "2xSaI",
+    "Eagle2x", "Eagle3x", "Eagle4x",
+    "HQ2x", "HQ3x", "HQ4x",
+    "NearestNeighbor2x", "NearestNeighbor3x", "NearestNeighbor4x",
+    "Scale2x", "Scale3x",
+    "Super2xSaI",
+    "SuperEagle",
+    "xBR2x", "xBR3x", "xBR4x"
+]
+
+
+class PixelArtScaler(io.ComfyNode):
     """
     A ComfyUI node for scaling pixel art using various algorithms
     Pure Python implementation - no external dependencies
     """
-    
-    def __init__(self):
-        pass
-    
+
     @classmethod
-    def INPUT_TYPES(cls):
-        return {
-            "required": {
-                "image": ("IMAGE",),
-                "algorithm": ([
-                    "2xSaI",
-                    "Eagle2x", "Eagle3x", "Eagle4x",
-                    "HQ2x", "HQ3x", "HQ4x",
-                    "NearestNeighbor2x", "NearestNeighbor3x", "NearestNeighbor4x",
-                    "Scale2x", "Scale3x",
-                    "Super2xSaI",
-                    "SuperEagle",
-                    "xBR2x", "xBR3x", "xBR4x"
-                ],),
-                "threshold": ("FLOAT", {
-                    "default": 48.0,
-                    "min": 0.0,
-                    "max": 255.0,
-                    "step": 1.0,
-                    "display": "slider"
-                }),
-            },
-        }
-    
-    RETURN_TYPES = ("IMAGE",)
-    RETURN_NAMES = ("IMAGE",)
-    FUNCTION = "scale_pixel_art"
-    CATEGORY = "image/upscaling"
+    def define_schema(cls) -> io.Schema:
+        return io.Schema(
+            node_id="PixelArtScaler",
+            display_name="Pixel Art Scaler (HQx/xBR)",
+            category="image/upscaling",
+            inputs=[
+                io.Image.Input("image"),
+                io.Combo.Input("algorithm", options=ALGORITHMS),
+                io.Float.Input(
+                    "threshold",
+                    default=48.0,
+                    min=0.0,
+                    max=255.0,
+                    step=1.0,
+                    display_mode=io.FloatDisplayMode.slider
+                ),
+            ],
+            outputs=[
+                io.Image.Output("IMAGE"),
+            ],
+        )
     
     def rgb_to_yuv(self, r, g, b):
         """Convert RGB to YUV for better color comparison"""
@@ -554,87 +556,104 @@ class PixelArtScaler:
 
         return out
     
-    def scale_pixel_art(self, image, algorithm, threshold):
+    @classmethod
+    def execute(cls, image, algorithm, threshold) -> io.NodeOutput:
         """Main scaling function"""
         # Convert from ComfyUI tensor format to numpy
         batch_numpy = image.cpu().numpy()
-        
+
+        # Create instance for helper methods
+        scaler = cls()
+
         # Process each image in the batch
         results = []
-        
+
         for img in batch_numpy:
             # Ensure proper shape (H, W, C)
             if len(img.shape) == 2:
                 img = np.expand_dims(img, axis=-1)
-            
+
             # Make sure we have float32 for calculations
             img = img.astype(np.float32)
-            
+
             # Apply selected algorithm
             if algorithm == "NearestNeighbor2x":
-                scaled = self.nearest_neighbor_core(img, 2)
+                scaled = scaler.nearest_neighbor_core(img, 2)
             elif algorithm == "NearestNeighbor3x":
-                scaled = self.nearest_neighbor_core(img, 3)
+                scaled = scaler.nearest_neighbor_core(img, 3)
             elif algorithm == "NearestNeighbor4x":
-                scaled = self.nearest_neighbor_core(img, 4)
+                scaled = scaler.nearest_neighbor_core(img, 4)
             elif algorithm == "Scale2x":
-                scaled = self.scale2x_core(img, threshold)
+                scaled = scaler.scale2x_core(img, threshold)
             elif algorithm == "Scale3x":
-                scaled = self.scale2x_core(img, threshold)
-                scaled = self.scale2x_core(scaled, threshold)
+                scaled = scaler.scale2x_core(img, threshold)
+                scaled = scaler.scale2x_core(scaled, threshold)
                 h, w = img.shape[:2]
                 scaled = scaled[:h*3, :w*3]
             elif algorithm == "HQ2x":
-                scaled = self.hq2x_core(img, threshold)
+                scaled = scaler.hq2x_core(img, threshold)
             elif algorithm == "HQ3x":
-                scaled = self.hq2x_core(img, threshold)
-                scaled = self.scale2x_core(scaled, threshold)
+                scaled = scaler.hq2x_core(img, threshold)
+                scaled = scaler.scale2x_core(scaled, threshold)
                 h, w = img.shape[:2]
                 scaled = scaled[:h*3, :w*3]
             elif algorithm == "HQ4x":
-                scaled = self.hq2x_core(img, threshold)
-                scaled = self.hq2x_core(scaled, threshold)
+                scaled = scaler.hq2x_core(img, threshold)
+                scaled = scaler.hq2x_core(scaled, threshold)
             elif algorithm == "xBR2x":
-                scaled = self.xbr2x_core(img, threshold)
+                scaled = scaler.xbr2x_core(img, threshold)
             elif algorithm == "xBR3x":
-                scaled = self.xbr2x_core(img, threshold)
-                scaled = self.scale2x_core(scaled, threshold)
+                scaled = scaler.xbr2x_core(img, threshold)
+                scaled = scaler.scale2x_core(scaled, threshold)
                 h, w = img.shape[:2]
                 scaled = scaled[:h*3, :w*3]
             elif algorithm == "xBR4x":
-                scaled = self.xbr2x_core(img, threshold)
-                scaled = self.xbr2x_core(scaled, threshold)
+                scaled = scaler.xbr2x_core(img, threshold)
+                scaled = scaler.xbr2x_core(scaled, threshold)
             elif algorithm == "Eagle2x":
-                scaled = self.eagle2x_core(img, threshold)
+                scaled = scaler.eagle2x_core(img, threshold)
             elif algorithm == "Eagle3x":
-                scaled = self.eagle2x_core(img, threshold)
-                scaled = self.scale2x_core(scaled, threshold)
+                scaled = scaler.eagle2x_core(img, threshold)
+                scaled = scaler.scale2x_core(scaled, threshold)
                 h, w = img.shape[:2]
                 scaled = scaled[:h*3, :w*3]
             elif algorithm == "Eagle4x":
-                scaled = self.eagle2x_core(img, threshold)
-                scaled = self.eagle2x_core(scaled, threshold)
+                scaled = scaler.eagle2x_core(img, threshold)
+                scaled = scaler.eagle2x_core(scaled, threshold)
             elif algorithm == "2xSaI":
-                scaled = self._2xsai_core(img, threshold)
+                scaled = scaler._2xsai_core(img, threshold)
             elif algorithm == "Super2xSaI":
-                scaled = self.super_2xsai_core(img, threshold)
+                scaled = scaler.super_2xsai_core(img, threshold)
             elif algorithm == "SuperEagle":
-                scaled = self.super_eagle_core(img, threshold)
+                scaled = scaler.super_eagle_core(img, threshold)
             else:
                 scaled = img
-            
+
             # Ensure output is in [0, 1] range
             scaled = np.clip(scaled, 0.0, 1.0)
-            
+
             results.append(scaled)
-        
+
         # Convert back to tensor
         output = torch.from_numpy(np.array(results)).float()
-        
-        return (output,)
+
+        return io.NodeOutput(output)
 
 
-# Node class mappings for ComfyUI
+# V3 Extension and entrypoint
+from comfy_api.latest import ComfyExtension
+
+
+class PixelArtScalersExtension(ComfyExtension):
+    async def get_node_list(self) -> list[type[io.ComfyNode]]:
+        return [PixelArtScaler]
+
+
+async def comfy_entrypoint() -> PixelArtScalersExtension:
+    return PixelArtScalersExtension()
+
+
+# V1 compatibility mappings (for older ComfyUI versions)
 NODE_CLASS_MAPPINGS = {
     "PixelArtScaler": PixelArtScaler
 }
